@@ -1,0 +1,40 @@
+
+{
+  "manifest_version": 3,
+  "name": "TOKUN - AI Prompt Optimizer",
+  "version": "1.0.0",
+  "description": "Optimize your AI prompts to reduce token usage while preserving meaning",
+  "action": {
+    "default_popup": "index.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://api.openai.com/",
+    "https://chat.openai.com/*",
+    "https://perplexity.ai/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://chat.openai.com/*", "https://perplexity.ai/*"],
+      "js": ["content-script.js"],
+      "css": ["content-styles.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

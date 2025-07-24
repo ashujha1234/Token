@@ -1,0 +1,60 @@
+
+
+TOKUN - AI PROMPT OPTIMIZER
+===========================
+
+Project Description:
+-------------------
+TOKUN is a Chrome extension that optimizes AI prompts by reducing token usage while preserving meaning. It helps users save costs and improve response times when working with AI platforms like OpenAI.
+
+Core Features:
+-------------
+1. Real-time token counting and analysis
+2. Multiple optimization suggestions with different approaches
+3. Extensive prompt library with categorized examples
+4. Visual analytics for token usage tracking
+5. Cross-platform compatibility with different AI providers
+
+Detailed Functionality:
+---------------------
+- Token Analysis Engine: Uses advanced algorithms to analyze prompt structure and token usage patterns
+- Smart Optimization: Suggests rewording, restructuring, and condensing options while maintaining the prompt's intent
+- Contextual Understanding: Preserves important context while removing redundant information
+- Template System: Save and reuse optimized prompt templates for consistent results
+- Usage Analytics: Track token savings over time with visual charts and reports
+- Provider-Specific Optimization: Tailored optimization strategies for different LLM providers (OpenAI, Claude, etc.)
+- Batch Processing: Optimize multiple prompts at once for bulk efficiency
+- Export Options: Share or download optimized prompts in various formats
+
+Technical Stack:
+--------------
+- Frontend: React, TypeScript, Tailwind CSS, ShadCN UI
+- Browser Integration: Chrome Extension API
+- Storage: Local browser storage
+- Data Visualization: Recharts
+- AI Integration: OpenAI API (with support for other providers)
+
+Privacy Features:
+---------------
+- All processing happens locally in the browser
+- API keys stored securely in browser storage
+- No data sent to remote servers unless explicitly authorized
+
+Installation:
+-----------
+1. Install from Chrome Web Store (link)
+2. Configure API key in settings
+3. Begin optimizing prompts immediately
+
+Development Setup:
+----------------
+- Required: Node.js v14+, npm/yarn
+- Build: npm install && npm run build
+- Load unpacked extension from 'dist' directory
+
+Project Status:
+-------------
+Current version: 1.0
+Last updated: May 2025
+GitHub: https://github.com/username/tokun
+

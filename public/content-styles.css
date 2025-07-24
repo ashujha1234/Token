@@ -1,0 +1,61 @@
+
+.tokun-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(30, 174, 219, 0.1);
+  border: 1px solid rgba(30, 174, 219, 0.3);
+  border-radius: 6px;
+  color: #1EAEDB;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+  height: 36px;
+}
+
+.tokun-button:hover {
+  background: rgba(30, 174, 219, 0.2);
+  border-color: #1EAEDB;
+}
+
+.tokun-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tokun-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.tokun-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  z-index: 10000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.tokun-info {
+  background-color: #1EAEDB;
+}
+
+.tokun-success {
+  background-color: #4CAF50;
+}
+
+.tokun-error {
+  background-color: #F44336;
+}
+
+.tokun-fade-out {
+  opacity: 0;
+  transform: translateY(10px);
+}
