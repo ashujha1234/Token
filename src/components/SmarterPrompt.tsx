@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Wand2, Copy, Sparkles, Zap, Mic, MicOff, Lightbulb, Download, ExternalLink, BookOpen, Gauge } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { llmService } from "@/services/llmService"; // Adjust path as needed
 
 interface SmarterPromptProps {
   onPromptGenerated?: (prompt: string) => void;
@@ -22,43 +23,56 @@ const SmarterPrompt = ({ onPromptGenerated, onUseInOptimizer }: SmarterPromptPro
 
   const exampleIdeas = [
     "Help me create a marketing strategy",
-    "Write a technical tutorial for beginners", 
+    "Write a technical tutorial for beginners",
     "Analyze competitor pricing models",
     "Design a user onboarding flow"
   ];
 
-  // Check for speech recognition support
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        setSpeechSupported(true);
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = 'en-US';
+  // Check for speech recognition support and set API key
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setSpeechSupported(true);
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = 'en-US';
 
-        recognitionRef.current.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setUserPrompt(prev => prev + (prev ? ' ' : '') + transcript);
-          setIsListening(false);
-        };
+      recognitionRef.current.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setUserPrompt(prev => prev + (prev ? ' ' : '') + transcript);
+        setIsListening(false);
+      };
 
-        recognitionRef.current.onerror = () => {
-          setIsListening(false);
-          toast({
-            title: "Speech recognition failed",
-            description: "Please try again or use text input",
-            variant: "destructive"
-          });
-        };
+      recognitionRef.current.onerror = () => {
+        setIsListening(false);
+        toast({
+          title: "Speech recognition failed",
+          description: "Please try again or use text input",
+          variant: "destructive"
+        });
+      };
 
-        recognitionRef.current.onend = () => {
-          setIsListening(false);
-        };
-      }
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
     }
-  }, []);
+
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY; // Updated to match .env
+    const model = import.meta.env.VITE_DEFAULT_MODEL || 'gpt-4o-mini'; // Use new variable or fallback
+    console.log('VITE_OPENAI_API_KEY:', apiKey, 'VITE_DEFAULT_MODEL:', model); // Debug log
+    if (apiKey) {
+      llmService.setConfig({ apiKey, provider: 'openai', model }); // Include model
+    } else {
+      toast({
+        title: "API Key Missing",
+        description: "Please set VITE_OPENAI_API_KEY in your .env file",
+        variant: "destructive"
+      });
+    }
+  }
+}, []);
 
   const startListening = () => {
     if (recognitionRef.current && speechSupported) {
@@ -78,178 +92,48 @@ const SmarterPrompt = ({ onPromptGenerated, onUseInOptimizer }: SmarterPromptPro
     setUserPrompt(example);
   };
 
-  const generateDetailedPrompt = async () => {
-    const promptToProcess = userPrompt.trim();
-    
-    if (!promptToProcess) {
-      toast({
-        title: "No prompt provided",
-        description: "Please enter a prompt first",
-        variant: "destructive"
-      });
-      return;
+const generateDetailedPrompt = async () => {
+  const promptToProcess = userPrompt.trim();
+
+  if (!promptToProcess) {
+    toast({
+      title: "No prompt provided",
+      description: "Please enter a prompt first",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  setIsGenerating(true);
+
+  try {
+    // Use a higher targetTokens value (e.g., 1000) to encourage a detailed response
+    const response = await llmService.optimizePrompt(promptToProcess, 1000);
+    setDetailedPrompt(response.optimizedText);
+
+    const originalTokens = await llmService.countTokens(promptToProcess).then(r => r.tokens);
+    const enhancedTokens = response.tokens;
+    const efficiencyScore = Math.min(95, Math.max(60, 100 - Math.round((enhancedTokens - originalTokens) / originalTokens * 50)));
+    setTokenEfficiencyScore(efficiencyScore);
+
+    if (onPromptGenerated) {
+      onPromptGenerated(response.optimizedText);
     }
 
-    setIsGenerating(true);
-    
-    // Simulate AI processing
-    setTimeout(() => {
-      const enhanced = createDetailedPrompt(promptToProcess);
-      setDetailedPrompt(enhanced);
-      
-      // Calculate token efficiency score
-      const originalTokens = Math.ceil(promptToProcess.length / 4);
-      const enhancedTokens = Math.ceil(enhanced.length / 4);
-      const efficiencyScore = Math.min(95, Math.max(60, 100 - Math.round((enhancedTokens - originalTokens) / originalTokens * 50)));
-      setTokenEfficiencyScore(efficiencyScore);
-      
-      if (onPromptGenerated) {
-        onPromptGenerated(enhanced);
-      }
-      
-      setIsGenerating(false);
-      
-      toast({
-        title: "Detailed Prompt Generated!",
-        description: "Your detailed prompt is ready",
-      });
-    }, 2000);
-  };
-
-  const createDetailedPrompt = (original: string): string => {
-    const lowerOriginal = original.toLowerCase();
-    
-    // Barber shop strategy
-    if (lowerOriginal.includes('barber shop') || lowerOriginal.includes('barbershop')) {
-      return `Research the Market – Understand local demand, competition, and customer needs.
-
-Create a Business Plan – Define services, pricing, budget, and revenue goals.
-
-Handle Legal Requirements – Register the business, get licenses, and ensure compliance.
-
-Choose a Good Location – Pick a visible, accessible spot and set up a clean, stylish space.
-
-Hire Skilled Staff – Recruit experienced barbers and provide training.
-
-Build Your Brand – Design a strong brand, use social media, and run local promotions.
-
-Focus on Customer Experience – Prioritize cleanliness, comfort, and service quality.
-
-Use Tools to Manage & Grow – Track bookings, collect feedback, and expand smartly.`;
-    }
-    
-    // Cafe/Coffee business
-    if (lowerOriginal.includes('cafe') || lowerOriginal.includes('coffee')) {
-      return `Market Research – Analyze local coffee market, customer preferences, and competition.
-
-Business Planning – Create comprehensive business plan with financial projections and timelines.
-
-Location Selection – Choose high-traffic area with good visibility and accessibility.
-
-Licensing & Permits – Obtain food service license, business registration, and health permits.
-
-Equipment & Setup – Purchase espresso machines, grinders, furniture, and POS systems.
-
-Menu Development – Design coffee menu, pricing strategy, and specialty offerings.
-
-Staffing – Hire experienced baristas, provide training, and establish service standards.
-
-Marketing & Branding – Develop brand identity, social media presence, and local marketing campaigns.
-
-Operations Management – Establish workflows, inventory management, and quality control procedures.
-
-Financial Management – Set up accounting systems, track expenses, and monitor profitability.`;
-    }
-    
-    // Marketing strategy
-    if (lowerOriginal.includes('marketing strategy')) {
-      return `Target Audience Analysis – Define customer personas, demographics, and behavior patterns.
-
-Competitive Research – Analyze competitors' strategies, positioning, and market share.
-
-Brand Positioning – Establish unique value proposition and brand messaging framework.
-
-Marketing Objectives – Set SMART goals, KPIs, and success metrics for campaigns.
-
-Channel Strategy – Select optimal marketing channels (digital, traditional, social media).
-
-Content Marketing Plan – Create content calendar, topics, and distribution strategy.
-
-Social Media Strategy – Develop platform-specific content and engagement tactics.
-
-Email Marketing – Design automated campaigns, segmentation, and personalization strategies.
-
-SEO/SEM Approach – Optimize search visibility and manage paid advertising campaigns.
-
-Budget Allocation – Distribute marketing spend across channels for maximum ROI.
-
-Performance Measurement – Track metrics, analyze results, and optimize campaigns continuously.`;
-    }
-    
-    // Technical tutorial
-    if (lowerOriginal.includes('technical tutorial')) {
-      return `Learning Objectives – Define clear, measurable goals for tutorial completion.
-
-Prerequisites – List required knowledge, tools, and software needed.
-
-Tutorial Structure – Create logical step-by-step progression with clear sections.
-
-Code Examples – Provide working code samples with detailed explanations.
-
-Visual Aids – Include screenshots, diagrams, and video demonstrations.
-
-Hands-on Exercises – Design practical activities to reinforce learning concepts.
-
-Troubleshooting Guide – Address common errors and provide solution strategies.
-
-Testing & Validation – Include methods to verify successful completion.
-
-Additional Resources – Link to documentation, tools, and further learning materials.
-
-Assessment Criteria – Create evaluation methods to measure understanding and progress.`;
-    }
-    
-    // Generic business strategy for other topics
-    if (lowerOriginal.includes('business') || lowerOriginal.includes('startup') || lowerOriginal.includes('company')) {
-      return `Market Research – Analyze target market, customer needs, and industry trends.
-
-Business Model – Define value proposition, revenue streams, and cost structure.
-
-Legal Framework – Register business, obtain permits, and ensure regulatory compliance.
-
-Financial Planning – Create budgets, cash flow projections, and funding strategies.
-
-Location & Infrastructure – Choose optimal location and set up necessary facilities.
-
-Team Building – Recruit skilled personnel and establish training programs.
-
-Brand Development – Create brand identity, marketing materials, and online presence.
-
-Operations Setup – Establish workflows, systems, and quality control processes.
-
-Customer Acquisition – Develop marketing strategies and customer engagement tactics.
-
-Growth Planning – Set milestones, track performance, and plan for scalable expansion.`;
-    }
-    
-    // Generic detailed response format
-    const topic = original.replace(/give me|create|develop|help me|write/gi, '').trim();
-    return `Key Analysis – Conduct thorough research and understand core requirements for ${topic}.
-
-Strategic Planning – Develop comprehensive approach with clear objectives and timelines.
-
-Resource Identification – Determine necessary tools, skills, and materials needed.
-
-Implementation Steps – Create detailed action plan with prioritized tasks and milestones.
-
-Best Practices – Apply industry standards and proven methodologies for optimal results.
-
-Risk Management – Identify potential challenges and develop mitigation strategies.
-
-Quality Assurance – Establish monitoring systems and success criteria for evaluation.
-
-Optimization Strategies – Implement continuous improvement processes and feedback loops.`;
-  };
+    toast({
+      title: "Detailed Prompt Generated!",
+      description: "Your detailed prompt is ready",
+    });
+  } catch (error) {
+    toast({
+      title: "Error Generating Prompt",
+      description: error instanceof Error ? error.message : "Failed to generate prompt",
+      variant: "destructive"
+    });
+  } finally {
+    setIsGenerating(false);
+  }
+};
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
@@ -267,7 +151,7 @@ Optimization Strategies – Implement continuous improvement processes and feedb
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
-    
+
     toast({
       title: "Download started",
       description: "Your prompt has been downloaded as a text file"
@@ -284,10 +168,10 @@ Optimization Strategies – Implement continuous improvement processes and feedb
       timestamp: new Date().toISOString(),
       tokenEfficiency: tokenEfficiencyScore
     };
-    
+
     savedPrompts.push(newPrompt);
     localStorage.setItem('saved_prompts', JSON.stringify(savedPrompts));
-    
+
     toast({
       title: "Saved to library",
       description: "Your prompt has been saved to your personal library"
@@ -299,7 +183,7 @@ Optimization Strategies – Implement continuous improvement processes and feedb
     window.open(`https://chat.openai.com/?prompt=${encodedPrompt}`, '_blank');
   };
 
-  const tokenCount = (text: string) => Math.ceil(text.length / 4);
+  const tokenCount = (text: string) => Math.ceil(text.length / 4); // Retained for UI consistency
 
   const getEfficiencyColor = (score: number) => {
     if (score >= 85) return "text-green-500";
@@ -323,7 +207,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Example Ideas Section */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Lightbulb className="h-4 w-4 text-tokun" />
@@ -343,7 +226,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
             </div>
           </div>
 
-          {/* Input Section */}
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Enter your prompt:</label>
             <div className="relative">
@@ -353,8 +235,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
                 placeholder="Enter your prompt here... (e.g., 'Give me a detailed prompt for how to start cafe business')"
                 className="min-h-32 pr-12"
               />
-              
-              {/* Speech Input Button */}
               {speechSupported && (
                 <Button
                   variant="ghost"
@@ -372,7 +252,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
                 </Button>
               )}
             </div>
-            
             {isListening && (
               <p className="text-sm text-tokun mt-2 flex items-center gap-2">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
@@ -380,7 +259,7 @@ Optimization Strategies – Implement continuous improvement processes and feedb
               </p>
             )}
           </div>
-          
+
           <div className="text-center mb-6">
             <Button
               onClick={generateDetailedPrompt}
@@ -416,7 +295,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
 
       {detailedPrompt && (
         <div className="space-y-6">
-          {/* Detailed Prompt Output */}
           <Card className="bg-gradient-to-br from-tokun/5 to-purple-500/5 border-tokun/30">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -444,8 +322,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
                 className="min-h-32 bg-background/50 border-tokun/20 focus:border-tokun/40 resize-none text-sm"
                 readOnly
               />
-              
-              {/* Action Buttons */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
                 <Button
                   variant="outline"
@@ -456,7 +332,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
                   <Copy className="h-4 w-4" />
                   Copy
                 </Button>
-                
                 <Button
                   variant="outline"
                   size="sm"
@@ -466,7 +341,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
                   <Download className="h-4 w-4" />
                   Download
                 </Button>
-                
                 <Button
                   variant="outline"
                   size="sm"
@@ -476,7 +350,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
                   <BookOpen className="h-4 w-4" />
                   Save to Library
                 </Button>
-                
                 <Button
                   variant="outline"
                   size="sm"
@@ -490,7 +363,6 @@ Optimization Strategies – Implement continuous improvement processes and feedb
             </CardContent>
           </Card>
 
-          {/* Token Efficiency Stats */}
           <Card className="bg-gradient-to-r from-green-500/10 to-tokun/10 border-green-500/20">
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
