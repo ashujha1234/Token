@@ -1,4 +1,3 @@
-
 export type LLMProvider = 'openai' | 'perplexity' | 'anthropic' | 'google' | 'other';
 
 export interface LLMConfig {
@@ -36,26 +35,23 @@ class LLMService {
   };
   
   constructor() {
-    // Load config on initialization
     this.loadConfig();
   }
   
   private loadConfig() {
     const savedProvider = localStorage.getItem('llm_provider') || 'openai';
-    const savedApiKey = localStorage.getItem(`${savedProvider}_key`);
+    const savedApiKey = localStorage.getItem(`${savedProvider}_key`) || '';
     const savedModel = localStorage.getItem(`${savedProvider}_model`) || DEFAULT_MODEL_BY_PROVIDER[savedProvider as LLMProvider];
     
     this.config = {
       provider: savedProvider as LLMProvider,
-      apiKey: savedApiKey || '',
+      apiKey: savedApiKey,
       model: savedModel
     };
   }
   
   setConfig(config: Partial<LLMConfig>) {
     this.config = { ...this.config, ...config };
-    
-    // Save to localStorage
     localStorage.setItem('llm_provider', this.config.provider);
     if (this.config.apiKey) {
       localStorage.setItem(`${this.config.provider}_key`, this.config.apiKey);
@@ -70,10 +66,7 @@ class LLMService {
   }
   
   async countTokens(text: string): Promise<TokenizerResponse> {
-    // Simple estimation - actual tokens are more complex
     const words = text.split(/\s+/).filter(Boolean).length;
-    
-    // Different token calculations based on provider
     let tokenMultiplier = 1.3; // Default for most models
     
     switch (this.config.provider) {
@@ -94,14 +87,10 @@ class LLMService {
     }
     
     const tokens = Math.round(words * tokenMultiplier);
-    
-    return {
-      tokens,
-      words
-    };
+    return { tokens, words };
   }
   
-  async optimizePrompt(text: string, targetTokens?: number): Promise<OptimizeResponse> {
+  async optimizePrompt(text: string, targetTokens?: number, mode: 'balanced' | 'detailed' = 'balanced'): Promise<OptimizeResponse> {
     if (!this.config.apiKey) {
       throw new Error("API key not set");
     }
@@ -109,18 +98,19 @@ class LLMService {
     try {
       const originalCount = await this.countTokens(text);
       const target = targetTokens || Math.max(Math.floor(originalCount.tokens * 0.7), 10);
+      const maxTokens = mode === 'detailed' ? 4000 : 1000;
       
       switch (this.config.provider) {
         case 'openai':
-          return this.optimizeWithOpenAI(text, target);
+          return await this.optimizeWithOpenAI(text, target, maxTokens, mode);
         case 'perplexity':
-          return this.optimizeWithPerplexity(text, target);
+          return await this.optimizeWithPerplexity(text, target, maxTokens, mode);
         case 'anthropic':
-          return this.optimizeWithAnthropic(text, target);
+          return await this.optimizeWithAnthropic(text, target, maxTokens, mode);
         case 'google':
-          return this.optimizeWithGoogle(text, target);
+          return await this.optimizeWithGoogle(text, target, maxTokens, mode);
         default:
-          return this.optimizeWithOpenAI(text, target);
+          return await this.optimizeWithOpenAI(text, target, maxTokens, mode);
       }
     } catch (error) {
       console.error('Error optimizing prompt:', error);
@@ -128,8 +118,11 @@ class LLMService {
     }
   }
   
-  // OpenAI optimization implementation
-  private async optimizeWithOpenAI(text: string, targetTokens: number): Promise<OptimizeResponse> {
+  private async optimizeWithOpenAI(text: string, targetTokens: number, maxTokens: number, mode: 'balanced' | 'detailed'): Promise<OptimizeResponse> {
+    const systemPrompt = mode === 'detailed'
+      ? `You are an expert at optimizing text to use fewer tokens while preserving meaning. Provide a highly detailed response with at least 10 specific steps, recommended tools, potential challenges with solutions, and performance metrics. Optimize the input to ~${targetTokens} tokens, returning JSON with "optimizedText" and "suggestions" array.`
+      : `You are an expert at optimizing text to use fewer tokens while preserving the original meaning. Optimize the input to ~${targetTokens} tokens, returning JSON with "optimizedText" and "suggestions" array.`;
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -139,41 +132,31 @@ class LLMService {
       body: JSON.stringify({
         model: this.config.model || 'gpt-4o-mini',
         messages: [
-          {
-            role: 'system',
-            content: `You are an expert at optimizing text to use fewer tokens while preserving the original meaning. 
-            Your task is to optimize the input text to be more concise, using fewer tokens, but preserving the core meaning.
-            Return a JSON object with the following structure:
-            {
-              "optimizedText": "the optimized version of the input text",
-              "suggestions": ["suggestion 1 for further optimization", "suggestion 2", "suggestion 3"]
-            }
-            Make the optimized text around ${targetTokens} tokens long.`
-          },
-          {
-            role: 'user',
-            content: text
-          }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text }
         ],
+        max_tokens: maxTokens,
         response_format: { type: "json_object" }
       })
     });
-    
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     const data = await response.json();
-    
     if (data.error) {
       throw new Error(data.error.message || 'Error optimizing prompt');
     }
-    
+
     let result;
     try {
       result = JSON.parse(data.choices[0].message.content);
     } catch (e) {
       throw new Error('Invalid response format from OpenAI');
     }
-    
+
     const optimizedCount = await this.countTokens(result.optimizedText);
-    
     return {
       optimizedText: result.optimizedText,
       tokens: optimizedCount.tokens,
@@ -182,8 +165,11 @@ class LLMService {
     };
   }
   
-  // Perplexity optimization implementation
-  private async optimizeWithPerplexity(text: string, targetTokens: number): Promise<OptimizeResponse> {
+  private async optimizeWithPerplexity(text: string, targetTokens: number, maxTokens: number, mode: 'balanced' | 'detailed'): Promise<OptimizeResponse> {
+    const systemPrompt = mode === 'detailed'
+      ? `You are an expert at optimizing text to use fewer tokens while preserving meaning. Provide a highly detailed response with at least 10 specific steps, recommended tools, potential challenges with solutions, and performance metrics. Optimize the input to ~${targetTokens} tokens, returning JSON with "optimizedText" and "suggestions" array.`
+      : `You are an expert at optimizing text to use fewer tokens while preserving the original meaning. Optimize the input to ~${targetTokens} tokens, returning JSON with "optimizedText" and "suggestions" array.`;
+    
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
@@ -193,43 +179,32 @@ class LLMService {
       body: JSON.stringify({
         model: this.config.model || 'llama-3.1-sonar-small-128k-online',
         messages: [
-          {
-            role: 'system',
-            content: `You are an expert at optimizing text to use fewer tokens while preserving the original meaning. 
-            Your task is to optimize the input text to be more concise, using fewer tokens, but preserving the core meaning.
-            Return a JSON object with the following structure:
-            {
-              "optimizedText": "the optimized version of the input text",
-              "suggestions": ["suggestion 1 for further optimization", "suggestion 2", "suggestion 3"]
-            }
-            Make the optimized text around ${targetTokens} tokens long.`
-          },
-          {
-            role: 'user',
-            content: text
-          }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text }
         ],
         temperature: 0.2,
-        max_tokens: 1000,
+        max_tokens: maxTokens,
         response_format: { type: "json_object" }
       })
     });
-    
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     const data = await response.json();
-    
     if (data.error) {
       throw new Error(data.error.message || 'Error optimizing prompt');
     }
-    
+
     let result;
     try {
       result = JSON.parse(data.choices[0].message.content);
     } catch (e) {
       throw new Error('Invalid response format from Perplexity');
     }
-    
+
     const optimizedCount = await this.countTokens(result.optimizedText);
-    
     return {
       optimizedText: result.optimizedText,
       tokens: optimizedCount.tokens,
@@ -238,11 +213,7 @@ class LLMService {
     };
   }
   
-  // Anthropic optimization implementation (placeholder)
-  private async optimizeWithAnthropic(text: string, targetTokens: number): Promise<OptimizeResponse> {
-    // Implementation would be similar to OpenAI and Perplexity
-    // This is a placeholder for the Anthropic API
-    
+  private async optimizeWithAnthropic(text: string, targetTokens: number, maxTokens: number, mode: 'balanced' | 'detailed'): Promise<OptimizeResponse> {
     const originalCount = await this.countTokens(text);
     return {
       optimizedText: text,
@@ -252,11 +223,7 @@ class LLMService {
     };
   }
   
-  // Google optimization implementation (placeholder)
-  private async optimizeWithGoogle(text: string, targetTokens: number): Promise<OptimizeResponse> {
-    // Implementation would be similar to OpenAI and Perplexity
-    // This is a placeholder for the Google AI API
-    
+  private async optimizeWithGoogle(text: string, targetTokens: number, maxTokens: number, mode: 'balanced' | 'detailed'): Promise<OptimizeResponse> {
     const originalCount = await this.countTokens(text);
     return {
       optimizedText: text,
