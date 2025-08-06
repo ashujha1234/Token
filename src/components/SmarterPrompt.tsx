@@ -29,50 +29,50 @@ const SmarterPrompt = ({ onPromptGenerated, onUseInOptimizer }: SmarterPromptPro
   ];
 
   // Check for speech recognition support and set API key
-useEffect(() => {
-  if (typeof window !== 'undefined') {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      setSpeechSupported(true);
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        setSpeechSupported(true);
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setUserPrompt(prev => prev + (prev ? ' ' : '') + transcript);
-        setIsListening(false);
-      };
+        recognitionRef.current.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setUserPrompt(prev => prev + (prev ? ' ' : '') + transcript);
+          setIsListening(false);
+        };
 
-      recognitionRef.current.onerror = () => {
-        setIsListening(false);
+        recognitionRef.current.onerror = () => {
+          setIsListening(false);
+          toast({
+            title: "Speech recognition failed",
+            description: "Please try again or use text input",
+            variant: "destructive"
+          });
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
+
+      const apiKey = import.meta.env.VITE_OPENAI_API_KEY; // Updated to match .env
+      const model = import.meta.env.VITE_DEFAULT_MODEL || 'gpt-4o-mini'; // Use new variable or fallback
+      console.log('VITE_OPENAI_API_KEY:', apiKey, 'VITE_DEFAULT_MODEL:', model); // Debug log
+      if (apiKey) {
+        llmService.setConfig({ apiKey, provider: 'openai', model }); // Include model
+      } else {
         toast({
-          title: "Speech recognition failed",
-          description: "Please try again or use text input",
+          title: "API Key Missing",
+          description: "Please set VITE_OPENAI_API_KEY in your .env file",
           variant: "destructive"
         });
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
+      }
     }
-
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY; // Updated to match .env
-    const model = import.meta.env.VITE_DEFAULT_MODEL || 'gpt-4o-mini'; // Use new variable or fallback
-    console.log('VITE_OPENAI_API_KEY:', apiKey, 'VITE_DEFAULT_MODEL:', model); // Debug log
-    if (apiKey) {
-      llmService.setConfig({ apiKey, provider: 'openai', model }); // Include model
-    } else {
-      toast({
-        title: "API Key Missing",
-        description: "Please set VITE_OPENAI_API_KEY in your .env file",
-        variant: "destructive"
-      });
-    }
-  }
-}, []);
+  }, []);
 
   const startListening = () => {
     if (recognitionRef.current && speechSupported) {
@@ -92,48 +92,48 @@ useEffect(() => {
     setUserPrompt(example);
   };
 
-const generateDetailedPrompt = async () => {
-  const promptToProcess = userPrompt.trim();
+  const generateDetailedPrompt = async () => {
+    const promptToProcess = userPrompt.trim();
 
-  if (!promptToProcess) {
-    toast({
-      title: "No prompt provided",
-      description: "Please enter a prompt first",
-      variant: "destructive"
-    });
-    return;
-  }
-
-  setIsGenerating(true);
-
-  try {
-    // Use a higher targetTokens value (e.g., 1000) to encourage a detailed response
-    const response = await llmService.optimizePrompt(promptToProcess, 1000);
-    setDetailedPrompt(response.optimizedText);
-
-    const originalTokens = await llmService.countTokens(promptToProcess).then(r => r.tokens);
-    const enhancedTokens = response.tokens;
-    const efficiencyScore = Math.min(95, Math.max(60, 100 - Math.round((enhancedTokens - originalTokens) / originalTokens * 50)));
-    setTokenEfficiencyScore(efficiencyScore);
-
-    if (onPromptGenerated) {
-      onPromptGenerated(response.optimizedText);
+    if (!promptToProcess) {
+      toast({
+        title: "No prompt provided",
+        description: "Please enter a prompt first",
+        variant: "destructive"
+      });
+      return;
     }
 
-    toast({
-      title: "Detailed Prompt Generated!",
-      description: "Your detailed prompt is ready",
-    });
-  } catch (error) {
-    toast({
-      title: "Error Generating Prompt",
-      description: error instanceof Error ? error.message : "Failed to generate prompt",
-      variant: "destructive"
-    });
-  } finally {
-    setIsGenerating(false);
-  }
-};
+    setIsGenerating(true);
+
+    try {
+      // Use a higher targetTokens value (e.g., 1000) to encourage a detailed response
+      const response = await llmService.optimizePrompt(promptToProcess, 1000, 'detailed');
+      setDetailedPrompt(response.optimizedText);
+
+      const originalTokens = tokenCount(promptToProcess);
+      const enhancedTokens = tokenCount(detailedPrompt);
+      const efficiencyScore = Math.min(95, Math.max(60, 100 - Math.round((enhancedTokens - originalTokens) / originalTokens * 50)));
+      setTokenEfficiencyScore(efficiencyScore);
+
+      if (onPromptGenerated) {
+        onPromptGenerated(response.optimizedText);
+      }
+
+      toast({
+        title: "Detailed Prompt Generated!",
+        description: `Your detailed prompt is ready (Efficiency: ${efficiencyScore}% - ${getEfficiencyLabel(efficiencyScore)})`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error Generating Prompt",
+        description: error instanceof Error ? error.message : "Failed to generate prompt",
+        variant: "destructive"
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
